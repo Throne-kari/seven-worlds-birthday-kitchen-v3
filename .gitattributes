@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.cmd text eol=crlf
+src/data/recipes/all.json -text
+dist/** -text

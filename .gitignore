@@ -1,0 +1,25 @@
+node_modules/
+.npm-cache/
+.library*/
+.review-history/
+.publish-tools/
+baseline/
+deliverables/
+research/
+qa/
+.env
+.env.*
+*.pem
+*.key
+*.log
+.DS_Store
+Thumbs.db
+# Working documents and private baseline notes stay local.
+docs/*
+!docs/RUN_LOCAL.txt
+!docs/DEPLOYMENT.md
+scripts/capture-library-highlights.mjs
+scripts/forest-drag-check.mjs
+scripts/package-smoke.mjs
+scripts/package-v3.ps1
+scripts/recheck-final-package.mjs

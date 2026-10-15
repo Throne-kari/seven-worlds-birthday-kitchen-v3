@@ -1,0 +1,42 @@
+import {chromium} from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+const base=process.env.REVIEW_URL||'http://127.0.0.1:5186/';
+const qa=path.resolve('qa');fs.mkdirSync(path.join(qa,'screenshots'),{recursive:true});
+const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
+const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1});
+const page=await context.newPage();const report={url:base,date:new Date().toISOString(),errors:[],failures:[],checks:[],screenshots:[]};
+page.on('pageerror',err=>report.errors.push(err.message));page.on('response',res=>{if(res.status()>=400)report.errors.push(`HTTP ${res.status()} ${res.url()}`);});
+const themes=['forest','csgo','delta','pubg','apex','elden','palworld'];
+async function check(name,fn){try{const result=await fn();report.checks.push({name,result:result??true});console.log('PASS',name);}catch(err){report.failures.push({name,error:err.message});console.log('FAIL',name,err.message.split('\n')[0]);}}
+async function shot(name,fullPage=false){await page.evaluate(()=>{document.documentElement.style.scrollBehavior='auto';window.scrollTo({top:0,behavior:'instant'});});await page.waitForTimeout(100);const file=`screenshots/${name}.png`;await page.screenshot({path:path.join(qa,file),fullPage,animations:'disabled'});report.screenshots.push(file);}
+async function click(action,more=''){const scope=await page.locator('dialog[open]').count()?page.locator('dialog[open]'):page;const el=scope.locator(`[data-action="${action}"]${more}`).filter({visible:true}).first();await el.click();}
+async function open(theme,pane='home',recipe=''){const params=new URLSearchParams({world:theme,pane});if(recipe)params.set('recipe',recipe);await page.goto(base+'?'+params);await page.locator('.world-ui').waitFor();await page.waitForTimeout(100);}
+try{
+for(const theme of themes){await check(theme+' desktop full workflow',async()=>{
+await open(theme);await shot(theme+'-1440-home');
+const catalogue=page.locator('[data-action="pane"][data-pane="catalog"]').filter({visible:true}).first();if(await catalogue.count())await catalogue.click();else await open(theme,'catalog');
+const choices=page.locator('[data-action="select"]').filter({visible:true});if(await choices.count()>1)await choices.nth(1).click();
+const url=new URL(page.url()),recipe=url.searchParams.get('recipe');await open(theme,'prep',recipe||'');
+if(theme==='delta'||theme==='csgo'){await click('focus-ingredient');await click('fill-ingredient');}else {const ingredient=page.locator('[data-action="ingredient"]').filter({visible:true}).first();if(await ingredient.count())await ingredient.click();}
+const before=await page.evaluate(()=>JSON.parse(localStorage.getItem('seven-kitchens.v3.local')));
+if(!Object.values(before.progress).some(p=>Object.values(p.amounts).some(n=>n>0)))throw new Error('No material confirmation recorded');
+await shot(theme+'-1440-prep');
+const gearTab=page.locator('[data-action="pane"][data-pane="gear"]').filter({visible:true}).first();if(await gearTab.count())await gearTab.click();else await open(theme,'gear',recipe||'');
+await click('gear');const addPlan=page.locator('[data-action="add-plan"]').filter({visible:true}).first();if(await addPlan.count())await addPlan.click();else {await open(theme,'prep',recipe||'');await click('add-plan');}
+await open(theme,'gear',recipe||'');
+const fav=page.locator('[data-action="favourite"]').filter({visible:true}).first();if(await fav.count())await fav.click();else {await click('read');await click('favourite');await click('close-panel');}
+await click('start');await page.locator('[data-step-body]').first().waitFor();
+if(await page.locator('dialog[open]').count())throw new Error('Primary cooking escaped into generic dialog');
+await click('complete');await click('timer');await shot(theme+'-1440-cook');
+const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('seven-kitchens.v3.local')));const current=stored.worlds[theme].selected;if(!stored.progress[current].steps.length)throw new Error('Step completion not saved');if(!Object.keys(stored.timers).length)throw new Error('Timer not created');
+await page.reload();await page.locator('[data-step-body]').waitFor();return {recipe:current,steps:stored.progress[current].steps.length,timers:Object.keys(stored.timers).length};
+});}
+await check('cross-cuisine Chinese and English ingredient search',async()=>{await open('forest');const input=page.locator('#search');await input.fill('garlic');await page.locator('.search-result').first().waitFor();const english=await page.locator('.search-result').count();await input.fill('麻婆豆腐');await input.press('ArrowDown');await input.press('Enter');await page.waitForTimeout(100);if(new URL(page.url()).searchParams.get('world')!=='csgo')throw new Error('Did not switch to Sichuan world');return {englishVisible:english,title:await page.title()};});
+await check('shopping, checked state and export',async()=>{await click('shopping');await page.locator('dialog[open]').waitFor();const checks=page.locator('[data-field="shopping-check"]');if(!await checks.count())throw new Error('Empty procurement after workflow');await checks.first().check();const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('seven-kitchens.v3.local')));if(!state.checked.length)throw new Error('Check not saved');const download=page.waitForEvent('download');await click('export-list');await (await download).saveAs(path.join(qa,'shopping-export.txt'));await click('close-panel');});
+await check('timer pause resume preserves duration',async()=>{await open('forest','cook','jin-001');await click('timer');await click('timers');await click('timer-pause');let st=await page.evaluate(()=>JSON.parse(localStorage.getItem('seven-kitchens.v3.local')));if(!Object.values(st.timers).some(t=>t.status==='paused'))throw new Error('No paused timer');await click('timer-pause');await click('close-panel');});
+await check('favourites readable',async()=>{await click('favourites');if(!await page.locator('.favourite-list button').count())throw new Error('No saved favourite');await click('close-panel');});
+for(const width of [390,320,768,1280]){await page.setViewportSize({width,height:width<500?844:900});for(const theme of themes){await check(`${theme} ${width}px layout`,async()=>{await open(theme,'prep');await shot(`${theme}-${width}-prep`,width<500);const overflow=await page.evaluate(()=>({doc:document.documentElement.scrollWidth,viewport:innerWidth}));if(overflow.doc>width+1)throw new Error('Horizontal overflow '+JSON.stringify(overflow));if(theme==='pubg'){await open(theme,'catalog');const refresh=page.locator('[data-action="refresh"]').filter({visible:true}).first();await refresh.click();await shot(`pubg-${width}-catalog`,width<500);await refresh.scrollIntoViewIfNeeded();const result=await refresh.evaluate(el=>{const r=el.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return el===hit||el.contains(hit);});if(!result)throw new Error('Refresh covered');}return overflow;});}}
+await check('keyboard and reduced motion / system cursor',async()=>{await page.setViewportSize({width:390,height:844});await open('elden');await page.emulateMedia({reducedMotion:'reduce'});await page.keyboard.press('/');if(!await page.locator('#search').evaluate(el=>el===document.activeElement))throw new Error('Slash search not focused');await page.keyboard.press('Escape');await page.keyboard.press('Tab');const focus=await page.evaluate(()=>({tag:document.activeElement.tagName,outline:getComputedStyle(document.activeElement).outlineStyle}));if(focus.outline==='none')throw new Error('No keyboard focus outline');const animation=await page.locator('.world-ui').evaluate(el=>getComputedStyle(el).animationName);if(animation!=='none')throw new Error('Motion not reduced');await click('settings');await page.locator('[data-field="system-cursor"]').check();await click('close-panel');if(await page.locator('body').getAttribute('data-system-cursor')!=='true')throw new Error('System cursor not enabled');return {focus,animation};});
+}finally{fs.writeFileSync(path.join(qa,'browser-verification.json'),JSON.stringify(report,null,2));await browser.close();}
+console.log(JSON.stringify({checks:report.checks.length,failures:report.failures,errors:report.errors,screenshots:report.screenshots.length},null,2));if(report.failures.length||report.errors.length)process.exitCode=1;

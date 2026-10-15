@@ -1,0 +1,15 @@
+七界厨房 · 第三版，本地成品包
+
+1. 将整个压缩包解压到一个目录。
+2. 本机需要 Node.js（本项目验证版本 24.14.0）。
+3. 双击 start-local.cmd，或在目录运行 node scripts/serve-dist.mjs。
+4. 浏览器打开 http://127.0.0.1:4186/ 。保持终端运行，Ctrl+C 停止。
+
+无需 npm install，也不需要网络。不要直接双击 dist/index.html。
+端口被占用时脚本会退出，不会停止其他服务。
+如需其他端口，在 PowerShell 运行：
+$env:PORT=4187; node scripts/serve-dist.mjs
+
+包含七套可操作主题和300道完整食谱。进度存于当前浏览器；无账户、云同步或公开发布。
+份量只换算材料，时间/器具不机械缩放。计时不自动标记食物完成，关闭页面不会主动通知。
+源码、设计研究和完整验收截图另见 birthday-kitchen-v3-complete.zip。

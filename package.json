@@ -1,0 +1,20 @@
+{
+  "name": "birthday-kitchen-v3",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5186 --strictPort",
+    "build": "node scripts/validate-recipes.mjs && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4186 --strictPort",
+    "test": "node --test --test-isolation=none tests/domain.test.mjs tests/v3-state.test.mjs",
+    "validate:data": "node scripts/validate-recipes.mjs",
+    "test:browser": "node scripts/verify-v3.mjs",
+    "serve": "node scripts/serve-dist.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.64.1",
+    "vite": "^8.3.4"
+  }
+}
